@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>お店・スポット自動検索GPT｜今この瞬間に開いているお店を4行で見つける</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+JP:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e0f;
+    --surface: #161618;
+    --card: #1c1c1f;
+    --amber: #f5a623;
+    --amber-light: #ffc654;
+    --amber-dim: rgba(245,166,35,0.12);
+    --amber-border: rgba(245,166,35,0.3);
+    --text: #f0ede6;
+    --text-muted: #888;
+    --text-dim: #555;
+    --green: #4ade80;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --radius: 12px;
+    --radius-lg: 20px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    line-height: 1.7;
+    font-size: 16px;
+  }
+
+  /* ─── NOISE TEXTURE ─── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 20px; position: relative; z-index: 1; }
+
+  /* ─── TOP BAR ─── */
+  .topbar {
+    text-align: center;
+    padding: 14px 20px;
+    background: var(--amber-dim);
+    border-bottom: 1px solid var(--amber-border);
+    font-size: 13px;
+    color: var(--amber-light);
+    letter-spacing: 0.05em;
+    position: relative; z-index: 1;
+  }
+
+  /* ─── HERO ─── */
+  .hero {
+    padding: 80px 20px 60px;
+    text-align: center;
+    position: relative;
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 600px; height: 400px;
+    background: radial-gradient(ellipse at center, rgba(245,166,35,0.1) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .badge {
+    display: inline-block;
+    background: var(--amber-dim);
+    border: 1px solid var(--amber-border);
+    color: var(--amber);
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.1em;
+    padding: 5px 14px;
+    border-radius: 100px;
+    margin-bottom: 28px;
+  }
+
+  .hero-title {
+    font-family: 'Noto Serif JP', serif;
+    font-size: clamp(28px, 6vw, 48px);
+    font-weight: 900;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    margin-bottom: 20px;
+  }
+
+  .hero-title span { color: var(--amber); }
+
+  .hero-sub {
+    font-size: 15px;
+    color: var(--text-muted);
+    max-width: 500px;
+    margin: 0 auto 40px;
+    line-height: 1.8;
+  }
+
+  .cta-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--amber);
+    color: #0e0e0f;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    padding: 18px 40px;
+    border-radius: 100px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 30px rgba(245,166,35,0.35);
+  }
+
+  .cta-main:hover {
+    background: var(--amber-light);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 40px rgba(245,166,35,0.5);
+  }
+
+  .price-note {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  /* ─── SECTION ─── */
+  section { padding: 70px 0; }
+
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--amber);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  h2 {
+    font-family: 'Noto Serif JP', serif;
+    font-size: clamp(22px, 4vw, 32px);
+    font-weight: 700;
+    line-height: 1.45;
+    margin-bottom: 24px;
+  }
+
+  p { color: #c8c4bc; line-height: 1.85; margin-bottom: 16px; }
+
+  /* ─── PAIN CARDS ─── */
+  .pain-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 28px;
+  }
+
+  @media (max-width: 540px) { .pain-grid { grid-template-columns: 1fr; } }
+
+  .pain-card {
+    background: var(--card);
+    border: 1px solid #2a2a2e;
+    border-radius: var(--radius);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .pain-card::before {
+    content: '✕';
+    position: absolute;
+    top: 16px; right: 16px;
+    color: var(--red);
+    font-size: 13px;
+    opacity: 0.7;
+  }
+
+  .pain-card p {
+    font-size: 14px;
+    margin: 0;
+    color: #aaa;
+  }
+
+  /* ─── DIVIDER ─── */
+  .divider {
+    text-align: center;
+    margin: 40px 0;
+    color: var(--amber);
+    font-size: 28px;
+    opacity: 0.7;
+  }
+
+  /* ─── DEMO TERMINAL ─── */
+  .terminal {
+    background: #111113;
+    border: 1px solid #2a2a2e;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin: 28px 0;
+  }
+
+  .terminal-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 12px 16px;
+    background: #1a1a1d;
+    border-bottom: 1px solid #2a2a2e;
+  }
+
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot-r { background: #ff5f57; }
+  .dot-y { background: #febc2e; }
+  .dot-g { background: #28c840; }
+
+  .terminal-label {
+    margin-left: auto;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #555;
+  }
+
+  .terminal-body { padding: 24px; }
+
+  .input-block {
+    background: var(--amber-dim);
+    border-left: 3px solid var(--amber);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+  }
+
+  .input-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--amber);
+    margin-bottom: 8px;
+  }
+
+  .input-text {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.9;
+  }
+
+  .output-block { }
+
+  .output-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--green);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .output-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(74,222,128,0.2);
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid #272729;
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 10px;
+  }
+
+  .result-name {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .result-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 4px;
+    line-height: 1.6;
+  }
+
+  .result-row .icon { flex-shrink: 0; }
+
+  .confidence {
+    display: inline-block;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 4px;
+    margin-top: 8px;
+  }
+
+  .vh { background: rgba(74,222,128,0.15); color: var(--green); }
+  .hi { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .med { background: rgba(251,191,36,0.15); color: #fbbf24; }
+
+  .result-card.skip {
+    opacity: 0.5;
+    border-style: dashed;
+  }
+
+  /* ─── FEATURE LIST ─── */
+  .feature-list { list-style: none; margin-top: 24px; }
+
+  .feature-list li {
+    display: flex;
+    gap: 14px;
+    padding: 16px 0;
+    border-bottom: 1px solid #1e1e21;
+    color: #c8c4bc;
+    font-size: 15px;
+    align-items: flex-start;
+  }
+
+  .feature-list li:last-child { border-bottom: none; }
+
+  .feat-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--amber-dim);
+    border: 1px solid var(--amber-border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .feat-text strong { display: block; color: var(--text); margin-bottom: 2px; }
+
+  /* ─── COMPARE ─── */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 28px;
+  }
+
+  @media (max-width: 480px) { .compare { grid-template-columns: 1fr; } }
+
+  .compare-card {
+    border-radius: var(--radius-lg);
+    padding: 24px;
+  }
+
+  .compare-bad {
+    background: rgba(248,113,113,0.06);
+    border: 1px solid rgba(248,113,113,0.2);
+  }
+
+  .compare-good {
+    background: rgba(74,222,128,0.06);
+    border: 1px solid rgba(74,222,128,0.2);
+  }
+
+  .compare-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin-bottom: 14px;
+  }
+
+  .compare-bad .compare-label { color: var(--red); }
+  .compare-good .compare-label { color: var(--green); }
+
+  .compare-item {
+    display: flex;
+    gap: 8px;
+    font-size: 14px;
+    color: #aaa;
+    margin-bottom: 8px;
+    line-height: 1.5;
+  }
+
+  /* ─── PRICING ─── */
+  .price-box {
+    background: var(--card);
+    border: 1px solid var(--amber-border);
+    border-radius: var(--radius-lg);
+    padding: 40px 32px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .price-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--amber), transparent);
+  }
+
+  .price-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 52px;
+    font-weight: 700;
+    color: var(--amber);
+    letter-spacing: -0.02em;
+  }
+
+  .price-tag span { font-size: 24px; vertical-align: super; }
+
+  .price-desc { color: var(--text-muted); font-size: 14px; margin: 4px 0 28px; }
+
+  .price-features { list-style: none; text-align: left; margin: 24px 0 32px; }
+
+  .price-features li {
+    display: flex;
+    gap: 10px;
+    color: #c8c4bc;
+    font-size: 14px;
+    padding: 9px 0;
+    border-bottom: 1px solid #2a2a2e;
+  }
+
+  .price-features li:last-child { border-bottom: none; }
+  .price-features li .chk { color: var(--green); }
+
+  .cta-buy {
+    display: block;
+    background: var(--amber);
+    color: #0e0e0f;
+    font-weight: 700;
+    font-size: 18px;
+    padding: 20px;
+    border-radius: 100px;
+    text-decoration: none;
+    transition: all 0.2s;
+    box-shadow: 0 4px 30px rgba(245,166,35,0.4);
+  }
+
+  .cta-buy:hover {
+    background: var(--amber-light);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 40px rgba(245,166,35,0.55);
+  }
+
+  /* ─── FOOTER ─── */
+  footer {
+    padding: 40px 20px;
+    text-align: center;
+    border-top: 1px solid #1e1e21;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  /* ─── ANIMATIONS ─── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .hero-title { animation: fadeUp 0.7s ease both; }
+  .hero-sub { animation: fadeUp 0.7s 0.15s ease both; }
+  .cta-main { animation: fadeUp 0.7s 0.3s ease both; }
+
+  /* ─── HR ─── */
+  hr { border: none; border-top: 1px solid #1e1e21; margin: 0; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  🗺️ ChatGPT × GPTs ｜ お店探し専用AI ｜ 買い切り ¥500
+</div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="wrap">
+    <div class="badge">ChatGPT GPTs</div>
+    <h1 class="hero-title">
+      「今開いてる店」を<br><span>4行</span>で見つける。<br>週末の30分を取り戻す。
+    </h1>
+    <p class="hero-sub">
+      現在地・時間・やりたいことを入力するだけ。<br>
+      信頼度・根拠・注意事項つきの候補リストを即座に返す、<br>お店探し専用に設計されたGPTsです。
+    </p>
+    <a href="https://chatgpt.com/g/g-69b3aea87f7081919f5241d60c36da36-wai-chu-pan-duan-asisutanto" target="_blank" class="cta-main">
+      ▶ このGPTsを使ってみる（無料）
+    </a>
+    <p class="price-note">インストラクションズ全文・カスタマイズ手順は有料パートへ</p>
+  </div>
+</div>
+
+<hr>
+
+<!-- PAIN -->
+<section>
+  <div class="wrap">
+    <div class="section-label">PROBLEM</div>
+    <h2>「どこ行こう」が、<br>時間泥棒になっていませんか？</h2>
+    <p>食べログ・Googleマップ・インスタ——複数のアプリを行き来して、気づけば30分。しかも行きたい店が臨時休業だったり、営業時間が変わっていたり。</p>
+
+    <div class="pain-grid">
+      <div class="pain-card"><p>ChatGPTに聞いたら<strong>存在しない店</strong>を紹介された</p></div>
+      <div class="pain-card"><p>情報が古くて<strong>閉業済みの店</strong>が出てくる</p></div>
+      <div class="pain-card"><p>複数アプリを<strong>何往復</strong>もして疲れる</p></div>
+      <div class="pain-card"><p>「今開いてるか」が<strong>一目でわからない</strong></p></div>
+    </div>
+  </div>
+</section>
+
+<hr>
+
+<!-- DEMO -->
+<section>
+  <div class="wrap">
+    <div class="section-label">DEMO</div>
+    <h2>実際の入力と出力を<br>そのまま見せます</h2>
+    <p>入力したのはたった4行。返ってきたのは、信頼度・根拠・注意事項がついた候補リストでした。</p>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="dot dot-r"></div>
+        <div class="dot dot-y"></div>
+        <div class="dot dot-g"></div>
+        <span class="terminal-label">お店・スポット自動検索GPT</span>
+      </div>
+      <div class="terminal-body">
+
+        <div class="input-block">
+          <div class="input-label">💬 INPUT</div>
+          <div class="input-text">
+            浜松餃子のお店調べて<br>
+            浜松駅付近<br>
+            17時にはすでに開店している<br>
+            今日現在
+          </div>
+        </div>
+
+        <div class="output-label">✦ OUTPUT</div>
+
+        <div class="result-card">
+          <div class="result-name">🏪 石松餃子 JR浜松駅店</div>
+          <div class="result-row"><span class="icon">📍</span>浜松駅直結〜徒歩約1〜2分、メイワン エキマチウエスト1F</div>
+          <div class="result-row"><span class="icon">🕐</span>営業時間：11:00〜22:00（年中無休）</div>
+          <div class="result-row"><span class="icon">✅</span>現在営業見込み：<strong style="color:var(--green)">営業中の可能性が高い</strong></div>
+          <div class="result-row"><span class="icon">📎</span>根拠：公式店舗ページ・メイワン公式・Yahoo!マップが整合</div>
+          <span class="confidence vh">Very High</span>
+        </div>
+
+        <div class="result-card">
+          <div class="result-name">🏪 濱松たんと 浜松駅南口店</div>
+          <div class="result-row"><span class="icon">📍</span>浜松駅南口から徒歩約2分</div>
+          <div class="result-row"><span class="icon">🕐</span>営業時間：15:00〜24:00</div>
+          <div class="result-row"><span class="icon">✅</span>現在営業見込み：<strong style="color:var(--green)">営業中の可能性が高い</strong></div>
+          <span class="confidence hi">High</span>
+        </div>
+
+        <div class="result-card">
+          <div class="result-name">🏪 五味八珍 メイワン店</div>
+          <div class="result-row"><span class="icon">📍</span>浜松駅直結、メイワン7F</div>
+          <div class="result-row"><span class="icon">🕐</span>営業時間：11:00〜22:00</div>
+          <div class="result-row"><span class="icon">✅</span>現在営業見込み：<strong style="color:var(--green)">営業中の可能性が高い</strong></div>
+          <span class="confidence hi">High</span>
+        </div>
+
+        <div class="result-card skip">
+          <div class="result-name">⛔ 浜太郎 浜松駅前店</div>
+          <div class="result-row"><span class="icon">🗓️</span>今日は水曜定休のため<strong style="color:var(--red)">対象外</strong>として除外</div>
+          <span class="confidence vh">Very High（定休確認済み）</span>
+        </div>
+
+      </div>
+    </div>
+
+    <p style="font-size:14px; color: var(--text-muted);">存在しない店を出すより「確認困難」と正直に言う設計。信頼できない情報は候補から落とします。</p>
+  </div>
+</section>
+
+<hr>
+
+<!-- FEATURES -->
+<section>
+  <div class="wrap">
+    <div class="section-label">FEATURES</div>
+    <h2>このGPTsが<br>普通の検索と違う3つの点</h2>
+
+    <ul class="feature-list">
+      <li>
+        <div class="feat-icon">🔍</div>
+        <div class="feat-text">
+          <strong>リアルタイムWeb検索で今この瞬間の情報を取得</strong>
+          ChatGPT単体の知識ではなく、ウェブを実際に調べながら回答します。古い情報・閉業済み店舗が混ざりにくい設計です。
+        </div>
+      </li>
+      <li>
+        <div class="feat-icon">⭐</div>
+        <div class="feat-text">
+          <strong>信頼度スコアを自動で算出して明示</strong>
+          情報源の数・更新日時・整合性を総合して Very High〜Very Low で表示。「Medium以下は電話確認」と判断できます。
+        </div>
+      </li>
+      <li>
+        <div class="feat-icon">🎯</div>
+        <div class="feat-text">
+          <strong>「今行って成立しやすい順」に並べる</strong>
+          距離だけでなく、営業見込み・定休日・情報鮮度を加味して順位付け。定休日の店は自動でリストから除外します。
+        </div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<hr>
+
+<!-- COMPARE -->
+<section>
+  <div class="wrap">
+    <div class="section-label">COMPARISON</div>
+    <h2>Before / After</h2>
+
+    <div class="compare">
+      <div class="compare-card compare-bad">
+        <div class="compare-label">✕ 普通のChatGPT</div>
+        <div class="compare-item"><span>✕</span>存在しない店名を自信満々に提案</div>
+        <div class="compare-item"><span>✕</span>閉業済み情報がそのまま出る</div>
+        <div class="compare-item"><span>✕</span>営業時間が数年前のまま</div>
+        <div class="compare-item"><span>✕</span>根拠・信頼度の表示がない</div>
+        <div class="compare-item"><span>✕</span>「今やってる？」がわからない</div>
+      </div>
+      <div class="compare-card compare-good">
+        <div class="compare-label">✔ このGPTs</div>
+        <div class="compare-item"><span style="color:var(--green)">✔</span>実在する店だけを提案</div>
+        <div class="compare-item"><span style="color:var(--green)">✔</span>閉業情報を自動チェック</div>
+        <div class="compare-item"><span style="color:var(--green)">✔</span>最新の営業時間を参照</div>
+        <div class="compare-item"><span style="color:var(--green)">✔</span>根拠・信頼度スコアを明示</div>
+        <div class="compare-item"><span style="color:var(--green)">✔</span>「今行ける店」だけに絞れる</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr>
+
+<!-- PRICING -->
+<section>
+  <div class="wrap">
+    <div class="section-label">PRICING</div>
+    <h2>3つの使い方</h2>
+
+    <!-- Free tier -->
+    <div class="price-box" style="margin-bottom:16px; border-color:#2a2a2e;">
+      <div style="font-size:13px; color:var(--text-muted); margin-bottom:4px; font-family:'Space Mono',monospace; letter-spacing:0.1em;">STEP 1</div>
+      <div style="font-size:26px; font-weight:700; color:var(--text); margin-bottom:4px;">まず無料で試す</div>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:24px;">完成品GPTsをそのまま使えます</p>
+      <a href="https://chatgpt.com/g/g-69b3aea87f7081919f5241d60c36da36-wai-chu-pan-duan-asisutanto" target="_blank" class="cta-buy" style="background:#2a2a2e; color:var(--text); box-shadow:none;">
+        ▶ GPTsを開く（ChatGPTログイン必要）
+      </a>
+    </div>
+
+    <!-- Paid tier -->
+    <div class="price-box">
+      <div style="font-size:13px; color:var(--amber); margin-bottom:4px; font-family:'Space Mono',monospace; letter-spacing:0.1em;">STEP 2 ／ 自分でカスタマイズしたい人へ</div>
+      <div class="price-tag"><span>¥</span>500</div>
+      <p class="price-desc">買い切り ｜ note記事有料パートで公開</p>
+
+      <ul class="price-features">
+        <li><span class="chk">✔</span>インストラクションズ全文（コピペで即使用可能）</li>
+        <li><span class="chk">✔</span>GPTs作成画面への貼り付け手順（スクショ付き）</li>
+        <li><span class="chk">✔</span>カスタマイズポイントの解説</li>
+        <li><span class="chk">✔</span>信頼度判定ロジックの設計解説</li>
+        <li><span class="chk">✔</span>飲食以外への応用パターン例</li>
+      </ul>
+
+      <a href="#" class="cta-buy">
+        📋 インストラクションズを購入する（¥500）
+      </a>
+      <p style="font-size:12px; color:var(--text-dim); margin-top:12px;">※ note有料記事へ遷移します</p>
+    </div>
+
+  </div>
+</section>
+
+<hr>
+
+<!-- FOOTER / PROFILE -->
+<footer>
+  <div class="wrap">
+    <p style="color:#666; margin-bottom:6px;">書いた人：高橋宏太朗</p>
+    <p style="color:#444; font-size:12px;">岐阜在住 23歳｜AIと自動化で月収10万円を目指しながら実際に試したことだけを発信。アニメオタク×消防団員×通信制大学生</p>
+    <p style="margin-top:16px; color:#333; font-size:12px;">© 2025 高橋宏太朗</p>
+  </div>
+</footer>
+
+</body>
+</html>
