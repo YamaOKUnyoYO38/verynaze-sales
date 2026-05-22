@@ -1,0 +1,18 @@
+{
+  "name": "要件定義クエスト",
+  "short_name": "要件クエスト",
+  "description": "プロ現場準拠のSE要件定義トレーニング",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EFF6FF",
+  "theme_color": "#0F172A",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
